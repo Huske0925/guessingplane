@@ -89,6 +89,11 @@ const tailTypeAliases: Array<{ type: TailType; pattern: RegExp }> = [
   },
 ];
 
+// 具体机型只能在最终猜测中使用，不能伪装成制造商问题进入提问记录。
+// 覆盖常见的波音、空客型号及游戏最终猜测支持的常用简称。
+const aircraftModelPattern = /(?:(?:波音|boeing|b)?(?:707|717|727|737|747|757|767|777|787)(?:-?\d{1,3})?(?:er|lr|f|x)?|(?:空客|空中客车|airbus)?a(?:220|300|310|318|319|320|321|330|340|350|380)(?:-?\d{1,3})?(?:neo|ceo|xl|xwb)?|77w|77l|772|773|788|789|c919|c909|arj21|md-?11|dc-?10|l-?1011)/i;
+const manufacturerFollowedByNumberPattern = /(?:(?:波音|boeing)(?:b)?-?\d+|(?:空客|空中客车|airbus)(?:a)?-?\d+)/i;
+
 function normalize(input: string): string {
   return input
     .trim()
@@ -130,6 +135,12 @@ export function parseQuestion(input: string): ParseResult {
 
   const negated = isNegated(normalizedText);
   const text = stripLeadingQuestionHelpers(normalizedText);
+
+  if (manufacturerFollowedByNumberPattern.test(text) || aircraftModelPattern.test(text)) {
+    return {
+      error: "具体机型属于禁止提问内容，请只询问制造商，例如“是波音吗？”。",
+    };
+  }
 
   if (/彩绘机|彩绘飞机|特殊涂装/.test(text)) {
     return { parsed: { kind: "specialLivery", value: true, negated } };
@@ -190,20 +201,17 @@ export function parseQuestion(input: string): ParseResult {
   if (/发动机.*机翼下|机翼下.*发动机|翼下吊挂|翼吊/.test(text)) {
     return { parsed: { kind: "enginesUnderWing", value: true, negated } };
   }
-  if (/六轮主起落架|六轮起落架/.test(text)) {
-    return { parsed: { kind: "structureTag", value: "六轮主起落架", negated } };
-  }
-  if (/双轮主起落架|两轮主起落架|双轮起落架|两轮起落架|起落架.*(?:两轮|双轮)|^(?:是)?(?:双轮|两轮|双论)(?:的)?(?:吗)?$/.test(text)) {
+  if (/双轮主起落架|两轮主起落架|2轮主起落架|双轮起落架|两轮起落架|2轮起落架|起落架.*(?:两轮|双轮|双论|双伦|2轮|2伦)|^(?:是)?(?:双轮|两轮|双论|双伦|2轮|2伦)(?:的)?(?:吗)?$/.test(text)) {
     return { parsed: { kind: "structureTag", value: "双轮主起落架", negated } };
   }
-  if (/单轮主起落架|一个轮主起落架|单轮起落架|一个轮起落架|起落架.*(?:单轮|单论|一个轮)|^(?:是)?(?:单轮|单论|一个轮)(?:的)?(?:吗)?$/.test(text)) {
+  if (/单轮主起落架|一轮主起落架|1轮主起落架|一个轮主起落架|单轮起落架|一轮起落架|1轮起落架|一个轮起落架|起落架.*(?:单轮|单论|单伦|一轮|1轮|1伦|一个轮)|^(?:是)?(?:单轮|单论|单伦|一轮|1轮|1伦|一个轮)(?:的)?(?:吗)?$/.test(text)) {
     return { parsed: { kind: "structureTag", value: "单轮主起落架", negated } };
   }
-  if (/三轮主起落架|三个轮主起落架|三轮起落架|三个轮起落架|起落架.*(?:三轮|三论|三个轮)|^(?:是)?(?:三轮|三论|三个轮)(?:的)?(?:吗)?$/.test(text)) {
+  if (/三轮主起落架|3轮主起落架|三个轮主起落架|三轮起落架|3轮起落架|三个轮起落架|起落架.*(?:三轮|三论|三伦|3轮|3伦|三个轮)|^(?:是)?(?:三轮|三论|三伦|3轮|3伦|三个轮)(?:的)?(?:吗)?$/.test(text)) {
     return { parsed: { kind: "structureTag", value: "三轮主起落架", negated } };
   }
 
-  return { error: "这个问题我暂时无法识别，请换一种问法。" };
+  return { error: "换一种问法吧" };
 }
 
 // 用解析后的含义判断重复，因此不同说法也会被识别为同一个问题。

@@ -26,8 +26,9 @@ export function getRecommendations(rules: RuleState, askedSignatures: string[] =
     "发动机在机翼下面吗？",
     "是常规尾翼吗？",
     "是 T 型尾翼吗？",
-    "是六轮主起落架吗？",
+    "是三轮主起落架吗？",
     "是双轮主起落架吗？",
+    "是单轮主起落架吗？",
     "是四发飞机吗？",
   );
 

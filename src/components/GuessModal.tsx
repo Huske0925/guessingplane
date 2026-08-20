@@ -63,7 +63,13 @@ export function GuessModal({ title, description, confirmLabel, target, onConfirm
             <h2 id="guess-title">{title}</h2>
             <p>{description}</p>
           </div>
-          {onClose && <button className="icon-button" disabled={Boolean(outcome)} onClick={onClose} aria-label="关闭">×</button>}
+          {onClose && (
+            <button className="icon-button" disabled={Boolean(outcome)} onClick={onClose} aria-label="关闭">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          )}
         </div>
 
         <label className={outcome === "wrong" ? "search-field guess-fields-wrong" : "search-field"}>

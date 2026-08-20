@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { Aircraft } from "../types/aircraft";
 import type { GameResult, QuestionRecord } from "../types/game";
 import { AircraftImage } from "./AircraftImage";
@@ -11,13 +12,34 @@ interface ResultScreenProps {
   onRestart: () => void;
 }
 
+function ScoreReel({ value }: { value: number }) {
+  return (
+    <span className="score-reel" aria-label={String(value)}>
+      {String(value).split("").map((digit, columnIndex) => {
+        const finalDigit = Number(digit);
+        const sequence = [...Array.from({ length: 20 }, (_, index) => index % 10), finalDigit];
+        const style = { "--reel-delay": `${columnIndex * 80}ms` } as CSSProperties;
+
+        return (
+          <span className="score-reel-window" key={`${digit}-${columnIndex}`} aria-hidden="true">
+            <span className="score-reel-track" style={style}>
+              {sequence.map((number, index) => <span key={index}>{number}</span>)}
+            </span>
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 export function ResultScreen({ target, result, history, guessCount, onRestart }: ResultScreenProps) {
   return (
     <main className="result-layout">
       <section className={result.won ? "result-hero win" : "result-hero loss"}>
         <p className="eyebrow">{result.won ? "TOUCHDOWN" : "ANSWER REVEALED"}</p>
         <h1>{result.won ? "猜对了！" : "本局未猜中"}</h1>
-        <p>{result.won ? `你获得了 ${result.score} 分` : "没关系，下一局会更接近答案。"}</p>
+        <p className="result-score">你获得了 <ScoreReel value={result.score} /> 分</p>
+        {!result.won && <p>没关系，下一局会更接近答案。</p>}
       </section>
 
       <section className="reveal-grid">
@@ -37,7 +59,7 @@ export function ResultScreen({ target, result, history, guessCount, onRestart }:
         </div>
       </section>
 
-      <QuestionHistory history={history} />
+      <QuestionHistory history={history} guessCount={guessCount} />
 
       <details className="sources-card">
         <summary>资料来源</summary>

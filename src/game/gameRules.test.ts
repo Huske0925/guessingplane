@@ -5,7 +5,9 @@ import { getQuestionSignature, parseQuestion } from "./questionParser";
 import { applyQuestionToRules, validateQuestion } from "./ruleValidator";
 import { currentMaxScore, scoreForGuess } from "./score";
 import { getRecommendations } from "./recommendations";
-import { resolveAircraftGuess } from "./guessMatcher";
+import { LIVERY_SIMILARITY_THRESHOLD, resolveAircraftGuess, textSimilarity } from "./guessMatcher";
+import { canMakeFinalGamble, canMakeIntermediateGuess } from "./guessRules";
+import { getLandingGearCategory } from "./landingGear";
 
 const emptyRules = { direction: null, regionQuestions: 0, colorQuestions: 0 } as const;
 
@@ -14,6 +16,25 @@ describe("问题解析", () => {
     "识别波音表达：%s",
     (text) => expect(parseQuestion(text).parsed).toMatchObject({ kind: "manufacturer", value: "Boeing" }),
   );
+
+  it.each([
+    "是波音747吗",
+    "波音787-9飞机吗",
+    "是747吗",
+    "是空客A350吗",
+    "A321neo吗",
+    "Boeing 777-300ER?",
+    "是77W吗",
+    "它是789吗",
+    "波音123",
+    "空客123",
+    "空中客车1234",
+    "Airbus 1234?",
+  ])("禁止在提问环节询问具体机型：%s", (text) => {
+    const result = parseQuestion(text);
+    expect(result.parsed).toBeUndefined();
+    expect(result.error).toContain("具体机型属于禁止提问内容");
+  });
 
   it.each(["是宽体吗", "是宽体机吗", "是不是宽体"])(
     "识别宽体表达：%s",
@@ -76,7 +97,7 @@ describe("问题解析", () => {
   });
 
   it("无法识别时不产生问题对象", () => {
-    expect(parseQuestion("它飞得快吗").parsed).toBeUndefined();
+    expect(parseQuestion("它飞得快吗")).toEqual({ error: "换一种问法吧" });
   });
 
   it.each(["有蓝色吗？", "有没有蓝色？", "机身有大面积蓝色吗？", "彩绘主要是蓝色吗？"])(
@@ -104,7 +125,7 @@ describe("问题解析", () => {
     }),
   );
 
-  it.each(["是单轮起落架吗？", "主起落架是单轮的吗？", "起落架是一个轮吗？", "单轮？", "单论？"])(
+  it.each(["是单轮起落架吗？", "主起落架是单轮的吗？", "起落架是一个轮吗？", "单轮？", "单论？", "单伦？", "一轮？", "1轮？", "1伦？"])(
     "识别单轮主起落架的常见表达：%s",
     (text) => expect(parseQuestion(text).parsed).toMatchObject({
       kind: "structureTag",
@@ -112,7 +133,7 @@ describe("问题解析", () => {
     }),
   );
 
-  it.each(["是三轮起落架吗？", "主起落架是三轮的吗？", "起落架是三个轮吗？", "三轮？"])(
+  it.each(["是三轮起落架吗？", "主起落架是三轮的吗？", "起落架是三个轮吗？", "三轮？", "三论？", "三伦？", "3轮？", "3伦？"])(
     "识别三轮主起落架的常见表达：%s",
     (text) => expect(parseQuestion(text).parsed).toMatchObject({
       kind: "structureTag",
@@ -120,13 +141,17 @@ describe("问题解析", () => {
     }),
   );
 
-  it.each(["双轮？", "两轮？", "是双轮吗？"])(
+  it.each(["双轮？", "两轮？", "是双轮吗？", "双论？", "双伦？", "2轮？", "2伦？"])(
     "识别双轮主起落架的简短表达：%s",
     (text) => expect(parseQuestion(text).parsed).toMatchObject({
       kind: "structureTag",
       value: "双轮主起落架",
     }),
   );
+
+  it("六轮不再作为起落架分类，777 统一按三轮理解", () => {
+    expect(parseQuestion("是六轮起落架吗？").parsed).toBeUndefined();
+  });
 
   it.each(["三发", "三发？", "是三发吗？", "三发飞机", "是三发飞机吗？", "三发飞机？"])(
     "识别三发飞机的常见表达：%s",
@@ -296,6 +321,36 @@ describe("回答和得分", () => {
     expect(scoreForGuess(10)).toBe(1);
     expect(currentMaxScore(0)).toBe(10);
   });
+
+  it.each([
+    ["Boeing 777-300ER", "三轮主起落架"],
+    ["Airbus A380-800", "三轮主起落架"],
+    ["Airbus A350-1000", "三轮主起落架"],
+    ["Airbus A350-900", "双轮主起落架"],
+    ["Boeing 787-9", "双轮主起落架"],
+    ["Boeing 767-300ER", "双轮主起落架"],
+    ["Boeing 757-200", "双轮主起落架"],
+    ["Boeing 737-800", "单轮主起落架"],
+    ["Airbus A320-200", "单轮主起落架"],
+    ["Airbus A321neo", "单轮主起落架"],
+  ] as const)("按游戏约定划分起落架：%s", (model, category) => {
+    expect(getLandingGearCategory(model)).toBe(category);
+  });
+
+  it("题库里的 777 会对三轮回答是、对双轮回答否", () => {
+    const boeing777 = aircraftData.find((item) => item.aircraftModel.includes("777"))!;
+    expect(answerQuestion(boeing777, parseQuestion("是三轮吗？").parsed!)).toBe(true);
+    expect(answerQuestion(boeing777, parseQuestion("是双轮吗？").parsed!)).toBe(false);
+  });
+});
+
+describe("猜测机会", () => {
+  it("三次中途猜测用完后立即开放最后博弈，不要求问满十题", () => {
+    expect(canMakeIntermediateGuess(4, 2)).toBe(true);
+    expect(canMakeIntermediateGuess(4, 3)).toBe(false);
+    expect(canMakeFinalGamble(2)).toBe(false);
+    expect(canMakeFinalGamble(3)).toBe(true);
+  });
 });
 
 describe("动态推荐问题", () => {
@@ -323,25 +378,34 @@ describe("动态推荐问题", () => {
 });
 
 describe("手动答案核验", () => {
-  it("题库中每个航空公司与机型组合都能唯一锁定彩绘", () => {
+  it("每一架飞机都必须提供彩绘名称后才能匹配", () => {
     for (const aircraft of aircraftData) {
       const resolution = resolveAircraftGuess(aircraft.airline, aircraft.aircraftModel);
-      expect(resolution).toMatchObject({ status: "matched", aircraft: { id: aircraft.id } });
+      expect(resolution).toMatchObject({ status: "livery-required" });
+      expect(resolveAircraftGuess(
+        aircraft.airline,
+        aircraft.aircraftModel,
+        aircraft.liveryName,
+      )).toMatchObject({ status: "matched", aircraft: { id: aircraft.id } });
     }
   });
 
   it.each([
-    ["ANA", "787-9", "ana-ja873a-r2d2"],
-    ["ANA", "789", "ana-ja873a-r2d2"],
-    ["全日空航空公司", "B787-9", "ana-ja873a-r2d2"],
-    ["KLM", "B777-300ER", "klm-phbva-orange-pride"],
-    ["KLM", "77W", "klm-phbva-orange-pride"],
-    ["华航", "321neo", "china-airlines-b18101-pikachu"],
-  ])("接受航空公司和机型的常见简称：%s / %s", (airline, model, expectedId) => {
-    expect(resolveAircraftGuess(airline, model)).toMatchObject({
+    ["ANA", "787-9", "R2D2", "ana-ja873a-r2d2"],
+    ["ANA", "789", "JA873A", "ana-ja873a-r2d2"],
+    ["全日空航空公司", "B787-9", "R2-D2 ANA Jet", "ana-ja873a-r2d2"],
+    ["KLM", "B777-300ER", "Orange Pride", "klm-phbva-orange-pride"],
+    ["KLM", "77W", "橙色骄傲", "klm-phbva-orange-pride"],
+    ["华航", "321neo", "皮卡丘", "china-airlines-b18101-pikachu"],
+  ])("接受航空公司和机型的常见简称：%s / %s", (airline, model, livery, expectedId) => {
+    expect(resolveAircraftGuess(airline, model, livery)).toMatchObject({
       status: "matched",
       aircraft: { id: expectedId },
     });
+  });
+
+  it("扩容后同航司同机型不会被系统擅自选中第一条", () => {
+    expect(resolveAircraftGuess("ANA", "787-9").status).toBe("livery-required");
   });
 
   it.each([
@@ -353,7 +417,7 @@ describe("手动答案核验", () => {
     ["Boeing 777-200LR", "77L"],
   ])("识别机型简称：%s 可输入为 %s", (aircraftModel, shorthand) => {
     const sample = { ...aircraftData[0], aircraftModel };
-    expect(resolveAircraftGuess(sample.airline, shorthand, "", [sample])).toMatchObject({
+    expect(resolveAircraftGuess(sample.airline, shorthand, sample.liveryName, [sample])).toMatchObject({
       status: "matched",
       aircraft: { id: sample.id },
     });
@@ -370,7 +434,7 @@ describe("手动答案核验", () => {
     };
     const data = [first, second];
 
-    expect(resolveAircraftGuess("ANA", "787-9", "", data).status).toBe("ambiguous");
+    expect(resolveAircraftGuess("ANA", "787-9", "", data).status).toBe("livery-required");
     expect(resolveAircraftGuess("ANA", "787-9", "R2D2", data)).toMatchObject({
       status: "matched",
       aircraft: { id: first.id },
@@ -378,6 +442,22 @@ describe("手动答案核验", () => {
     expect(resolveAircraftGuess("ANA", "787-9", "第二彩绘", data)).toMatchObject({
       status: "matched",
       aircraft: { id: second.id },
+    });
+  });
+
+  it("彩绘名称相似度超过 70% 时可以匹配，低于或等于阈值时判错", () => {
+    expect(textSimilarity("R2D3", "R2D2")).toBeGreaterThan(LIVERY_SIMILARITY_THRESHOLD);
+    expect(resolveAircraftGuess("ANA", "787-9", "R2D3")).toMatchObject({
+      status: "matched",
+      aircraft: { id: "ana-ja873a-r2d2" },
+    });
+    expect(resolveAircraftGuess("ANA", "787-9", "完全无关的名称").status).toBe("not-found");
+  });
+
+  it("彩绘输入会忽略常见辅助词、彩绘和涂装字样", () => {
+    expect(resolveAircraftGuess("吉祥", "789", "它是东方宝石彩绘吗")).toMatchObject({
+      status: "matched",
+      aircraft: { id: "juneyao-b20ec-oriental-ruby" },
     });
   });
 

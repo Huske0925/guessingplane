@@ -1,5 +1,6 @@
 import type { Aircraft, AirlineRegionQuery } from "../types/aircraft";
 import type { ParsedQuestion } from "../types/game";
+import { getLandingGearCategory } from "./landingGear";
 
 const groupedRegions: Partial<Record<AirlineRegionQuery, Aircraft["airlineRegion"][]>> = {
   亚洲: ["东亚", "东南亚", "南亚", "中东"],
@@ -44,7 +45,11 @@ export function answerQuestion(aircraft: Aircraft, question: ParsedQuestion): bo
       answer = aircraft.enginesUnderWing;
       break;
     case "structureTag":
-      answer = [...aircraft.structureTags, ...aircraft.landingGearTags].includes(question.value);
+      if (["单轮主起落架", "双轮主起落架", "三轮主起落架"].includes(question.value)) {
+        answer = getLandingGearCategory(aircraft.aircraftModel) === question.value;
+      } else {
+        answer = [...aircraft.structureTags, ...aircraft.landingGearTags].includes(question.value);
+      }
       break;
     case "specialLivery":
       answer = true;
