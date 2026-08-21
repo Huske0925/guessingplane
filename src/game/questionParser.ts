@@ -1,5 +1,6 @@
 import type { AirlineRegionQuery, TailType } from "../types/aircraft";
-import type { ParsedQuestion } from "../types/game";
+import type { AirlineLocation } from "../data/airlineLocations";
+import type { GameMode, ParsedQuestion } from "../types/game";
 
 export interface ParseResult {
   parsed?: ParsedQuestion;
@@ -28,10 +29,34 @@ const regionAliases: Array<{ value: AirlineRegionQuery; aliases: string[] }> = [
 
 const airlineDescriptorPattern = /航空公司|航空|航司|公司/;
 
-const ordinaryCountries = [
-  "美国", "日本", "英国", "新加坡", "德国", "法国", "韩国", "加拿大",
-  "澳大利亚", "新西兰", "阿联酋", "卡塔尔", "荷兰", "比利时", "冰岛",
-  "印度", "泰国", "马来西亚", "印度尼西亚", "巴西", "南非",
+const locationAliases: Array<{ value: AirlineLocation; aliases: string[] }> = [
+  { value: "台湾地区", aliases: ["中国台湾", "台湾地区", "台湾"] },
+  { value: "香港地区", aliases: ["中国香港", "香港地区", "香港"] },
+  { value: "澳门地区", aliases: ["中国澳门", "澳门地区", "澳门"] },
+  { value: "中国大陆", aliases: ["中国大陆", "大陆", "中国"] },
+  { value: "阿塞拜疆", aliases: ["阿塞拜疆"] },
+  { value: "澳大利亚", aliases: ["澳大利亚", "澳洲"] },
+  { value: "新西兰", aliases: ["新西兰"] },
+  { value: "新加坡", aliases: ["新加坡"] },
+  { value: "阿联酋", aliases: ["阿联酋"] },
+  { value: "卡塔尔", aliases: ["卡塔尔"] },
+  { value: "印度尼西亚", aliases: ["印度尼西亚", "印尼"] },
+  { value: "马来西亚", aliases: ["马来西亚"] },
+  { value: "南非", aliases: ["南非"] },
+  { value: "巴西", aliases: ["巴西"] },
+  { value: "印度", aliases: ["印度"] },
+  { value: "泰国", aliases: ["泰国"] },
+  { value: "加拿大", aliases: ["加拿大"] },
+  { value: "比利时", aliases: ["比利时"] },
+  { value: "冰岛", aliases: ["冰岛"] },
+  { value: "芬兰", aliases: ["芬兰"] },
+  { value: "荷兰", aliases: ["荷兰"] },
+  { value: "德国", aliases: ["德国"] },
+  { value: "法国", aliases: ["法国"] },
+  { value: "英国", aliases: ["英国"] },
+  { value: "美国", aliases: ["美国"] },
+  { value: "日本", aliases: ["日本"] },
+  { value: "韩国", aliases: ["韩国"] },
 ];
 
 const colorAliases: Record<string, string[]> = {
@@ -129,7 +154,7 @@ function parseEngineCount(text: string): SupportedEngineCount | undefined {
   return undefined;
 }
 
-export function parseQuestion(input: string): ParseResult {
+export function parseQuestion(input: string, mode: GameMode = "hard"): ParseResult {
   const normalizedText = normalize(input);
   if (!normalizedText) return { error: "请输入一个问题。" };
 
@@ -146,13 +171,18 @@ export function parseQuestion(input: string): ParseResult {
     return { parsed: { kind: "specialLivery", value: true, negated } };
   }
 
-  if (/中国|大陆|香港|澳门|台湾/.test(text) && (airlineDescriptorPattern.test(text) || /来自|属于|的吗/.test(text))) {
-    return { parsed: { kind: "china", value: true, negated } };
-  }
-
-  const country = ordinaryCountries.find((candidate) => text.includes(candidate));
-  if (country && (airlineDescriptorPattern.test(text) || /来自|属于|的吗/.test(text))) {
-    return { parsed: { kind: "unsupportedCountry", value: country, negated } };
+  const location = locationAliases.find(({ aliases }) => aliases.some((alias) => text.includes(alias)));
+  const isBareLocationQuestion = location?.aliases.some((alias) => (
+    text === alias || text === `${alias}吗` || text === `${alias}地区` || text === `${alias}地区吗`
+  ));
+  if (location && (airlineDescriptorPattern.test(text) || /来自|属于|的吗|地区/.test(text) || isBareLocationQuestion)) {
+    if (mode === "easy") {
+      return { parsed: { kind: "country", value: location.value, negated } };
+    }
+    if (location.value === "中国大陆") {
+      return { parsed: { kind: "china", value: true, negated } };
+    }
+    return { parsed: { kind: "unsupportedCountry", value: location.value, negated } };
   }
 
   const region = regionAliases.find(({ aliases }) => aliases.some((alias) => text.includes(alias)));

@@ -1,23 +1,29 @@
-import type { RuleState } from "../types/game";
+import type { GameMode, RuleState } from "../types/game";
 import { getQuestionSignature, parseQuestion } from "./questionParser";
+import { modeRules } from "./modeRules";
 
-export function getRecommendations(rules: RuleState, askedSignatures: string[] = []): string[] {
+export function getRecommendations(
+  rules: RuleState,
+  askedSignatures: string[] = [],
+  mode: GameMode = "hard",
+): string[] {
   const candidates: string[] = [];
   const asked = new Set(askedSignatures);
+  const config = modeRules[mode];
 
-  if (!rules.direction || rules.direction === "bodyType") {
+  if (!config.directionIsExclusive || !rules.direction || rules.direction === "bodyType") {
     candidates.push("是宽体机吗？");
   }
-  if (!rules.direction || rules.direction === "manufacturer") {
+  if (!config.directionIsExclusive || !rules.direction || rules.direction === "manufacturer") {
     candidates.push("是波音飞机吗？");
   }
-  if (rules.regionQuestions < 2) {
+  if (rules.regionQuestions < config.maxRegionQuestions) {
     candidates.push(
       "是欧洲航空公司吗？",
-      "是中国航空公司吗？",
+      mode === "easy" ? "是日本航空公司吗？" : "是中国航空公司吗？",
     );
   }
-  if (rules.colorQuestions < 2) {
+  if (rules.colorQuestions < config.maxColorQuestions) {
     candidates.push("机身有大面积蓝色吗？");
   }
   candidates.push(
@@ -33,10 +39,15 @@ export function getRecommendations(rules: RuleState, askedSignatures: string[] =
   );
 
   // 次选问题放在结构问题之后，避免推荐区被同一类别占满。
-  if (rules.regionQuestions < 2) {
-    candidates.push("是东亚航空公司吗？", "是北美航空公司吗？", "是大洋洲航空公司吗？");
+  if (rules.regionQuestions < config.maxRegionQuestions) {
+    candidates.push(
+      "是东亚航空公司吗？",
+      "是北美航空公司吗？",
+      "是大洋洲航空公司吗？",
+      ...(mode === "easy" ? ["是台湾地区航空公司吗？", "是澳大利亚航空公司吗？"] : []),
+    );
   }
-  if (rules.colorQuestions < 2) {
+  if (rules.colorQuestions < config.maxColorQuestions) {
     candidates.push(
       "机身有大面积红色吗？",
       "机身有大面积黄色吗？",
@@ -47,7 +58,7 @@ export function getRecommendations(rules: RuleState, askedSignatures: string[] =
 
   return candidates
     .filter((question) => {
-      const parsed = parseQuestion(question).parsed;
+      const parsed = parseQuestion(question, mode).parsed;
       return parsed ? !asked.has(getQuestionSignature(parsed)) : false;
     })
     .slice(0, 7);

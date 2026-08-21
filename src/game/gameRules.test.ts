@@ -248,6 +248,15 @@ describe("规则校验", () => {
     expect(validateQuestion(manufacturer, usedRules, 1).valid).toBe(false);
   });
 
+  it("简单模式允许分别询问宽窄体和制造商", () => {
+    const body = parseQuestion("是宽体机吗", "easy").parsed!;
+    const manufacturer = parseQuestion("是波音吗", "easy").parsed!;
+    const usedRules = applyQuestionToRules(body, { ...emptyRules }, "easy");
+
+    expect(usedRules.direction).toBeNull();
+    expect(validateQuestion(manufacturer, usedRules, 1, "easy").valid).toBe(true);
+  });
+
   it("地区问题最多两次，普通国家被拒绝，中国被允许", () => {
     const china = parseQuestion("是中国航空公司吗").parsed!;
     expect(validateQuestion(china, { ...emptyRules }, 0).valid).toBe(true);
@@ -257,16 +266,66 @@ describe("规则校验", () => {
     expect(validateQuestion(japan, { ...emptyRules }, 0).valid).toBe(false);
   });
 
-  it("港澳台航空公司被中国规则包含", () => {
+  it("简单模式准确区分中国大陆与台湾地区航空公司", () => {
     const eva = aircraftData.find((item) => item.registration === "B-16722")!;
-    const china = parseQuestion("是中国航空公司吗").parsed!;
-    expect(answerQuestion(eva, china)).toBe(true);
+    const mainland = aircraftData.find((item) => item.airline === "中国东方航空")!;
+    const taiwan = parseQuestion("它是台湾地区航空公司吗", "easy").parsed!;
+    const china = parseQuestion("是中国大陆航空公司吗", "easy").parsed!;
+
+    expect(taiwan).toMatchObject({ kind: "country", value: "台湾地区" });
+    expect(china).toMatchObject({ kind: "country", value: "中国大陆" });
+    expect(answerQuestion(eva, taiwan)).toBe(true);
+    expect(answerQuestion(mainland, taiwan)).toBe(false);
+    expect(answerQuestion(eva, china)).toBe(false);
+    expect(answerQuestion(mainland, china)).toBe(true);
+  });
+
+  it.each([
+    ["日本航司", "日本"],
+    ["是否是澳大利亚航空公司", "澳大利亚"],
+    ["它是香港地区公司吗", "香港地区"],
+    ["台湾航空公司吗", "台湾地区"],
+    ["是法国航司吗", "法国"],
+    ["来自印度尼西亚吗", "印度尼西亚"],
+  ])("简单模式识别国家或所在地：%s", (text, value) => {
+    expect(parseQuestion(text, "easy").parsed).toMatchObject({ kind: "country", value });
+  });
+
+  it("困难模式仍拒绝普通国家和台湾地区问题", () => {
+    const japan = parseQuestion("日本航空公司吗").parsed!;
+    const taiwan = parseQuestion("台湾航空公司吗").parsed!;
+
+    expect(japan.kind).toBe("unsupportedCountry");
+    expect(taiwan).toMatchObject({ kind: "unsupportedCountry", value: "台湾地区" });
+    expect(validateQuestion(japan, { ...emptyRules }, 0, "hard").valid).toBe(false);
+    expect(validateQuestion(taiwan, { ...emptyRules }, 0, "hard").valid).toBe(false);
   });
 
   it("颜色问题最多两次", () => {
     const color = parseQuestion("有大面积蓝色吗").parsed!;
     const used = { direction: null, regionQuestions: 0, colorQuestions: 2 } as const;
     expect(validateQuestion(color, used, 2).valid).toBe(false);
+  });
+
+  it("简单模式允许三个颜色问题，第四个才被拒绝", () => {
+    const color = parseQuestion("有大面积蓝色吗", "easy").parsed!;
+    const twiceUsed = { direction: null, regionQuestions: 0, colorQuestions: 2 } as const;
+    const threeUsed = { direction: null, regionQuestions: 0, colorQuestions: 3 } as const;
+
+    expect(validateQuestion(color, twiceUsed, 2, "easy").valid).toBe(true);
+    expect(validateQuestion(color, threeUsed, 3, "easy")).toMatchObject({
+      valid: false,
+      message: "本局最多只能询问 3 次机身颜色。",
+    });
+  });
+
+  it("简单模式的国家问题与地区问题共用两次上限", () => {
+    const japan = parseQuestion("日本航空公司吗", "easy").parsed!;
+    const available = { direction: null, regionQuestions: 1, colorQuestions: 0 } as const;
+    const exhausted = { direction: null, regionQuestions: 2, colorQuestions: 0 } as const;
+
+    expect(validateQuestion(japan, available, 1, "easy").valid).toBe(true);
+    expect(validateQuestion(japan, exhausted, 2, "easy").valid).toBe(false);
   });
 
   it("限定彩绘问题不消耗次数", () => {

@@ -5,8 +5,9 @@ import { getRecommendations } from "../game/recommendations";
 import { applyQuestionToRules, validateQuestion } from "../game/ruleValidator";
 import { currentMaxScore, scoreForGuess } from "../game/score";
 import { canMakeFinalGamble, canMakeIntermediateGuess, MAX_INTERMEDIATE_GUESSES } from "../game/guessRules";
+import { modeRules } from "../game/modeRules";
 import type { Aircraft } from "../types/aircraft";
-import type { GameResult, QuestionRecord, RuleState } from "../types/game";
+import type { GameMode, GameResult, QuestionRecord, RuleState } from "../types/game";
 import { FinalGuessIntro } from "./FinalGuess";
 import { FinalGuessModal } from "./FinalGuessModal";
 import { QuestionHistory } from "./QuestionHistory";
@@ -14,8 +15,10 @@ import { ResultScreen } from "./ResultScreen";
 import { StatusPanel } from "./StatusPanel";
 
 interface GameScreenProps {
+  mode: GameMode;
   target: Aircraft;
   onRestart: () => void;
+  onReselectMode: () => void;
 }
 
 const initialRules: RuleState = {
@@ -24,7 +27,7 @@ const initialRules: RuleState = {
   colorQuestions: 0,
 };
 
-export function GameScreen({ target, onRestart }: GameScreenProps) {
+export function GameScreen({ mode, target, onRestart, onReselectMode }: GameScreenProps) {
   const [question, setQuestion] = useState("");
   const [history, setHistory] = useState<QuestionRecord[]>([]);
   const [rules, setRules] = useState<RuleState>(initialRules);
@@ -37,7 +40,7 @@ export function GameScreen({ target, onRestart }: GameScreenProps) {
 
   const questionCount = history.length;
   const isFinal = questionCount >= 10 && !result;
-  const recommendations = getRecommendations(rules, history.map((record) => record.signature));
+  const recommendations = getRecommendations(rules, history.map((record) => record.signature), mode);
   const canGuess = canMakeIntermediateGuess(questionCount, guessCount);
   const canFinalGamble = canMakeFinalGamble(guessCount);
   const isDuplicateFeedback = feedback === "您已经问过这个问题了";
@@ -57,7 +60,7 @@ export function GameScreen({ target, onRestart }: GameScreenProps) {
     setFeedback(null);
     setFeedbackKind("default");
 
-    const parseResult = parseQuestion(question);
+    const parseResult = parseQuestion(question, mode);
     if (!parseResult.parsed) {
       setFeedback(parseResult.error ?? "换一种问法吧");
       setFeedbackKind("question-invalid");
@@ -70,7 +73,7 @@ export function GameScreen({ target, onRestart }: GameScreenProps) {
       return;
     }
 
-    const validation = validateQuestion(parseResult.parsed, rules, questionCount);
+    const validation = validateQuestion(parseResult.parsed, rules, questionCount, mode);
     if (!validation.valid) {
       setFeedback(validation.message ?? "这个问题不符合本局规则。");
       setFeedbackKind("question-invalid");
@@ -84,7 +87,7 @@ export function GameScreen({ target, onRestart }: GameScreenProps) {
       answer,
       signature,
     }]);
-    setRules((current) => applyQuestionToRules(parseResult.parsed!, current));
+    setRules((current) => applyQuestionToRules(parseResult.parsed!, current, mode));
     setQuestion("");
   }
 
@@ -113,6 +116,7 @@ export function GameScreen({ target, onRestart }: GameScreenProps) {
         history={history}
         guessCount={guessCount + (result.wasFinalGuess ? 1 : 0)}
         onRestart={onRestart}
+        onReselectMode={onReselectMode}
       />
     );
   }
@@ -134,7 +138,7 @@ export function GameScreen({ target, onRestart }: GameScreenProps) {
   }
 
   return (
-    <main className="game-layout">
+    <main className="game-layout" data-game-mode={mode}>
       <header className="game-header">
         <div>
           <p className="eyebrow">GuessingPlane</p>
@@ -144,6 +148,7 @@ export function GameScreen({ target, onRestart }: GameScreenProps) {
       </header>
 
       <StatusPanel
+        mode={mode}
         questionCount={questionCount}
         guessCount={guessCount}
         maxScore={currentMaxScore(questionCount)}
@@ -209,12 +214,23 @@ export function GameScreen({ target, onRestart }: GameScreenProps) {
       </section>
 
       <button className="restart-card" type="button" onClick={onRestart}>重新开始</button>
+      <button className="restart-card" type="button" onClick={onReselectMode}>重新选择难度</button>
 
       <aside className="rules-note">
         <strong>本局提示</strong>
-        <span>宽窄体与制造商只能选择一个方向</span>
-        <span>地区、颜色问题各最多 2 次</span>
-        <span>普通国家不可直接询问，中国除外</span>
+        {mode === "easy" ? (
+          <>
+            <span>宽窄体与制造商可以分别提问</span>
+            <span>地区 / 国家问题最多 {modeRules[mode].maxRegionQuestions} 次，颜色问题最多 {modeRules[mode].maxColorQuestions} 次</span>
+            <span>国家和地区名称均可直接询问</span>
+          </>
+        ) : (
+          <>
+            <span>宽窄体与制造商只能选择一个方向</span>
+            <span>地区、颜色问题各最多 2 次</span>
+            <span>普通国家不可直接询问，中国大陆除外</span>
+          </>
+        )}
       </aside>
 
       {isDuplicateFeedback && (

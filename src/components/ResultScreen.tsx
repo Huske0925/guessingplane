@@ -10,6 +10,7 @@ interface ResultScreenProps {
   history: QuestionRecord[];
   guessCount: number;
   onRestart: () => void;
+  onReselectMode: () => void;
 }
 
 function ScoreReel({ value }: { value: number }) {
@@ -32,7 +33,7 @@ function ScoreReel({ value }: { value: number }) {
   );
 }
 
-export function ResultScreen({ target, result, history, guessCount, onRestart }: ResultScreenProps) {
+export function ResultScreen({ target, result, history, guessCount, onRestart, onReselectMode }: ResultScreenProps) {
   return (
     <main className="result-layout">
       <section className={result.won ? "result-hero win" : "result-hero loss"}>
@@ -55,7 +56,10 @@ export function ResultScreen({ target, result, history, guessCount, onRestart }:
             <div><dt>正式问题</dt><dd>{history.length} / 10</dd></div>
             <div><dt>猜测次数</dt><dd>{guessCount}</dd></div>
           </dl>
-          <button className="button primary wide" onClick={onRestart}>再来一局</button>
+          <div className="result-actions">
+            <button className="button primary" type="button" onClick={onRestart}>再来一局</button>
+            <button className="button secondary" type="button" onClick={onReselectMode}>重选难度</button>
+          </div>
         </div>
       </section>
 

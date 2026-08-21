@@ -1,5 +1,6 @@
 import type { Aircraft, AirlineRegionQuery } from "../types/aircraft";
 import type { ParsedQuestion } from "../types/game";
+import { getAirlineLocation } from "../data/airlineLocations";
 import { getLandingGearCategory } from "./landingGear";
 
 const groupedRegions: Partial<Record<AirlineRegionQuery, Aircraft["airlineRegion"][]>> = {
@@ -24,7 +25,10 @@ export function answerQuestion(aircraft: Aircraft, question: ParsedQuestion): bo
         : aircraft.airlineRegion === question.value || aircraft.airlineSubregion === question.value;
       break;
     case "china":
-      answer = aircraft.isChina;
+      answer = getAirlineLocation(aircraft.airline) === "中国大陆";
+      break;
+    case "country":
+      answer = getAirlineLocation(aircraft.airline) === question.value;
       break;
     case "color":
       answer = aircraft.largeAreaColors.includes(question.value);

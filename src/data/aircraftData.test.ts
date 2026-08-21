@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { aircraftData } from "./aircraftData";
 import { expandedAircraftData } from "./expandedAircraftData";
+import { getAirlineLocation } from "./airlineLocations";
 
 const addedRegistrations = [
   "JA874A",
@@ -38,5 +39,13 @@ describe("aircraftData", () => {
     expect(expandedAircraftData.every((aircraft) => aircraft.image === undefined)).toBe(true);
     expect(expandedAircraftData.every((aircraft) => aircraft.sources.length > 0)).toBe(true);
     expect(aircraftData).toEqual(expect.arrayContaining(expandedAircraftData));
+  });
+
+  it("has an explicit country or area mapping for every airline", () => {
+    const unmappedAirlines = aircraftData
+      .filter((aircraft) => getAirlineLocation(aircraft.airline) === undefined)
+      .map((aircraft) => aircraft.airline);
+
+    expect(unmappedAirlines).toEqual([]);
   });
 });
