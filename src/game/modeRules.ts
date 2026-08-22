@@ -11,7 +11,7 @@ export const modeRules: Record<GameMode, ModeRules> = {
   easy: {
     directionIsExclusive: false,
     allowCountryQuestions: true,
-    maxRegionQuestions: 2,
+    maxRegionQuestions: 3,
     maxColorQuestions: 3,
   },
   hard: {

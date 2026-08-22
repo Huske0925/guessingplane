@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { resolveAircraftGuess } from "../game/guessMatcher";
+import { resolveAircraftGuessByRegistration } from "../game/guessMatcher";
 import type { Aircraft } from "../types/aircraft";
 import { GuessOutcomeEffect, type GuessOutcome } from "./GuessOutcomeEffect";
 
@@ -17,12 +17,11 @@ export function FinalGuessModal({
   onResolved,
   onClose,
   title = "输入最终答案",
-  description = "输入航空公司、具体机型和彩绘名称，系统将直接核验答案。",
+  description = "输入航空公司和飞机注册号，系统将直接核验答案。",
   confirmLabel = "确认答案",
 }: FinalGuessModalProps) {
   const [airline, setAirline] = useState("");
-  const [aircraftModel, setAircraftModel] = useState("");
-  const [liveryName, setLiveryName] = useState("");
+  const [registration, setRegistration] = useState("");
   const [outcome, setOutcome] = useState<GuessOutcome | null>(null);
   const timerRef = useRef<number | null>(null);
 
@@ -34,7 +33,7 @@ export function FinalGuessModal({
     event.preventDefault();
     if (outcome) return;
 
-    const resolution = resolveAircraftGuess(airline, aircraftModel, liveryName);
+    const resolution = resolveAircraftGuessByRegistration(airline, registration);
     const won = resolution.status === "matched" && resolution.aircraft.id === target.id;
     setOutcome(won ? "correct" : "wrong");
     timerRef.current = window.setTimeout(() => onResolved(won), 1500);
@@ -74,29 +73,19 @@ export function FinalGuessModal({
                 onChange={(event) => {
                   setAirline(event.target.value);
                 }}
-                placeholder="例如：全日空、ANA"
+                placeholder="例如：南航、China Southern、CZ"
               />
             </label>
             <label>
-              <span>具体机型</span>
+              <span>注册号</span>
               <input
-                value={aircraftModel}
+                value={registration}
                 disabled={Boolean(outcome)}
                 aria-invalid={outcome === "wrong"}
                 onChange={(event) => {
-                  setAircraftModel(event.target.value);
+                  setRegistration(event.target.value);
                 }}
-                placeholder="例如：Boeing 787-9、787-9"
-              />
-            </label>
-            <label>
-              <span>彩绘名称</span>
-              <input
-                value={liveryName}
-                disabled={Boolean(outcome)}
-                aria-invalid={outcome === "wrong"}
-                onChange={(event) => setLiveryName(event.target.value)}
-                placeholder="可以输入中文名、英文名、常用简称或注册号"
+                placeholder="例如：B-2727、JA873A"
               />
             </label>
           </div>
@@ -106,7 +95,7 @@ export function FinalGuessModal({
             <button
               className="button primary"
               type="submit"
-              disabled={!airline.trim() || !aircraftModel.trim() || !liveryName.trim() || Boolean(outcome)}
+              disabled={!airline.trim() || !registration.trim() || Boolean(outcome)}
             >
               {confirmLabel}
             </button>

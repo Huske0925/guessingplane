@@ -45,10 +45,12 @@ export interface Aircraft {
   isChina: boolean;
   aircraftModel: string;
   registration: string;
+  fuselageLengthMeters: number;
   manufacturer: Manufacturer;
   bodyType: BodyType;
   largeAreaColors: string[];
   engineCount: 1 | 2 | 3 | 4 | 5 | 6;
+  engineModel?: string;
   hasWinglet: boolean;
   wingletType?: string;
   hasUpperDeck: boolean;
@@ -59,3 +61,5 @@ export interface Aircraft {
   image?: AircraftImage;
   sources: DataSource[];
 }
+
+export type AircraftSeed = Omit<Aircraft, "fuselageLengthMeters">;

@@ -13,6 +13,10 @@ export type ParsedQuestion =
   | { kind: "country"; value: AirlineLocation; negated: boolean }
   | { kind: "color"; value: string; negated: boolean }
   | { kind: "engineCount"; value: 1 | 2 | 3 | 4 | 5 | 6; negated: boolean }
+  | { kind: "engineModel"; value: string; negated: boolean }
+  | { kind: "fuselageLengthExact"; value: string; negated: boolean }
+  | { kind: "fuselageLengthAbove"; value: number; negated: boolean }
+  | { kind: "fuselageLengthBelow"; value: number; negated: boolean }
   | { kind: "winglet"; value: true; negated: boolean }
   | { kind: "upperDeck"; value: true; negated: boolean }
   | { kind: "tailType"; value: TailType; negated: boolean }

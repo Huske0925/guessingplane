@@ -29,6 +29,7 @@ export function getRecommendations(
   candidates.push(
     "有小翼吗？",
     "是双发飞机吗？",
+    "机身长度超过60米吗？",
     "发动机在机翼下面吗？",
     "是常规尾翼吗？",
     "是 T 型尾翼吗？",
@@ -44,7 +45,7 @@ export function getRecommendations(
       "是东亚航空公司吗？",
       "是北美航空公司吗？",
       "是大洋洲航空公司吗？",
-      ...(mode === "easy" ? ["是台湾地区航空公司吗？", "是澳大利亚航空公司吗？"] : []),
+      ...(mode === "easy" ? ["是澳大利亚航空公司吗？"] : []),
     );
   }
   if (rules.colorQuestions < config.maxColorQuestions) {

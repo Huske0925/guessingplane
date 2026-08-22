@@ -2,6 +2,7 @@ import type { Aircraft, AirlineRegionQuery } from "../types/aircraft";
 import type { ParsedQuestion } from "../types/game";
 import { getAirlineLocation } from "../data/airlineLocations";
 import { getLandingGearCategory } from "./landingGear";
+import { engineModelMatchesQuery } from "../data/engineModels";
 
 const groupedRegions: Partial<Record<AirlineRegionQuery, Aircraft["airlineRegion"][]>> = {
   亚洲: ["东亚", "东南亚", "南亚", "中东"],
@@ -25,7 +26,7 @@ export function answerQuestion(aircraft: Aircraft, question: ParsedQuestion): bo
         : aircraft.airlineRegion === question.value || aircraft.airlineSubregion === question.value;
       break;
     case "china":
-      answer = getAirlineLocation(aircraft.airline) === "中国大陆";
+      answer = aircraft.isChina;
       break;
     case "country":
       answer = getAirlineLocation(aircraft.airline) === question.value;
@@ -36,6 +37,21 @@ export function answerQuestion(aircraft: Aircraft, question: ParsedQuestion): bo
     case "engineCount":
       answer = aircraft.engineCount === question.value;
       break;
+    case "engineModel":
+      answer = engineModelMatchesQuery(aircraft.engineModel, question.value);
+      break;
+    case "fuselageLengthAbove":
+      answer = aircraft.fuselageLengthMeters > question.value;
+      break;
+    case "fuselageLengthBelow":
+      answer = aircraft.fuselageLengthMeters < question.value;
+      break;
+    case "fuselageLengthExact": {
+      const decimalPlaces = question.value.includes(".") ? question.value.split(".")[1].length : 0;
+      const factor = 10 ** decimalPlaces;
+      answer = Math.round(aircraft.fuselageLengthMeters * factor) / factor === Number(question.value);
+      break;
+    }
     case "winglet":
       answer = aircraft.hasWinglet;
       break;

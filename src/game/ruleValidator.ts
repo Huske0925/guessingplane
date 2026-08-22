@@ -31,6 +31,16 @@ export function validateQuestion(
     };
   }
 
+  if (
+    question.kind === "unsupportedCountry"
+    && ["台湾地区", "香港地区", "澳门地区"].includes(String(question.value))
+  ) {
+    return {
+      valid: false,
+      message: "台湾、香港、澳门不能作为单独地区问题，请统一询问是否属于中国。",
+    };
+  }
+
   if (question.kind === "unsupportedCountry" || (question.kind === "country" && !config.allowCountryQuestions)) {
     return {
       valid: false,

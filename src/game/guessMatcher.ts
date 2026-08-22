@@ -9,6 +9,33 @@ export type GuessResolution =
 
 export const LIVERY_SIMILARITY_THRESHOLD = 0.7;
 
+const airlineCodes: Record<string, string[]> = {
+  中国国际航空: ["CA", "CCA"],
+  中国南方航空: ["CZ", "CSN"],
+  中国东方航空: ["MU", "CES"],
+  厦门航空: ["MF", "CXA"],
+  吉祥航空: ["HO", "DKH"],
+  深圳航空: ["ZH", "CSZ"],
+  海南航空: ["HU", "CHH"],
+  中华航空: ["CI", "CAL"],
+  长荣航空: ["BR", "EVA"],
+  国泰航空: ["CX", "CPA"],
+  全日空: ["NH", "ANA"],
+  马来西亚航空: ["MH", "MAS"],
+  新加坡航空: ["SQ", "SIA"],
+  卡塔尔航空: ["QR", "QTR"],
+  汉莎航空: ["LH", "DLH"],
+  达美航空: ["DL", "DAL"],
+  新西兰航空: ["NZ", "ANZ"],
+  英国航空: ["BA", "BAW"],
+  美国联合航空: ["UA", "UAL"],
+  西捷航空: ["WS", "WJA"],
+  荷兰皇家航空: ["KL", "KLM"],
+  布鲁塞尔航空: ["SN", "BEL"],
+  冰岛航空: ["FI", "ICE"],
+  丝绸之路西部航空: ["7L", "AZG"],
+};
+
 function normalize(value: string): string {
   return value
     .normalize("NFKC")
@@ -26,9 +53,9 @@ function airlineKeys(value: string): string[] {
 }
 
 const aircraftModelAliases: Record<string, string[]> = {
-  "7879": ["789"],
-  "7878": ["788"],
-  "78710": ["78x"],
+  "7879": ["789", "787"],
+  "7878": ["788", "787"],
+  "78710": ["78x", "787"],
   "777300er": ["77w"],
   "777200": ["772"],
   "777300": ["773"],
@@ -82,8 +109,26 @@ function hasSharedKey(left: string[], right: string[]): boolean {
 
 function matchesAirline(input: string, aircraft: Aircraft): boolean {
   const inputKeys = airlineKeys(input);
-  return [aircraft.airline, ...aircraft.airlineAliases]
+  return [aircraft.airline, ...aircraft.airlineAliases, ...(airlineCodes[aircraft.airline] ?? [])]
     .some((name) => hasSharedKey(inputKeys, airlineKeys(name)));
+}
+
+export function resolveAircraftGuessByRegistration(
+  airline: string,
+  registration: string,
+  data: Aircraft[] = aircraftData,
+): GuessResolution {
+  const registrationKey = normalize(registration);
+  if (!airline.trim() || !registrationKey) return { status: "not-found" };
+
+  const matches = data.filter((aircraft) => (
+    matchesAirline(airline, aircraft)
+    && normalize(aircraft.registration) === registrationKey
+  ));
+
+  if (matches.length === 1) return { status: "matched", aircraft: matches[0] };
+  if (matches.length > 1) return { status: "ambiguous", candidates: matches };
+  return { status: "not-found" };
 }
 
 function matchesModel(input: string, aircraft: Aircraft): boolean {

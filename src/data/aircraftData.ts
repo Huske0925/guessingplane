@@ -1,8 +1,11 @@
-import type { Aircraft } from "../types/aircraft";
+import type { Aircraft, AircraftSeed } from "../types/aircraft";
+import { applyAircraftDimensions } from "./aircraftDimensions";
 import { expandedAircraftData } from "./expandedAircraftData";
+import { applyEngineModelClassification } from "./engineModels";
+import { applyWingletClassification } from "./wingletTypes";
 
 // 图片将在第二阶段由用户提供并逐条核验；当前 image 留空，由界面显示占位图。
-export const aircraftData: Aircraft[] = [
+const aircraftSeeds: AircraftSeed[] = [
   {
     id: "ana-ja873a-r2d2",
     liveryName: "R2-D2 ANA Jet",
@@ -15,7 +18,7 @@ export const aircraftData: Aircraft[] = [
     registration: "JA873A",
     manufacturer: "Boeing",
     bodyType: "widebody",
-    largeAreaColors: ["白色", "蓝色"],
+    largeAreaColors: ["白色", "蓝色", "黑色"],
     engineCount: 2,
     hasWinglet: false,
     hasUpperDeck: false,
@@ -37,7 +40,7 @@ export const aircraftData: Aircraft[] = [
     registration: "JA743A",
     manufacturer: "Boeing",
     bodyType: "widebody",
-    largeAreaColors: ["白色", "黄色"],
+    largeAreaColors: ["白色", "黄色", "黑色"],
     engineCount: 2,
     hasWinglet: false,
     hasUpperDeck: false,
@@ -59,7 +62,7 @@ export const aircraftData: Aircraft[] = [
     registration: "JA789A",
     manufacturer: "Boeing",
     bodyType: "widebody",
-    largeAreaColors: ["白色", "橙色"],
+    largeAreaColors: ["白色", "橙色", "灰色"],
     engineCount: 2,
     hasWinglet: false,
     hasUpperDeck: false,
@@ -106,12 +109,12 @@ export const aircraftData: Aircraft[] = [
     largeAreaColors: ["紫色", "粉色", "黄色"],
     engineCount: 2,
     hasWinglet: true,
-    wingletType: "鲨鳍小翼",
+    wingletType: "融合式小翼",
     hasUpperDeck: false,
     tailType: "conventional",
     enginesUnderWing: true,
     landingGearTags: ["前三点式", "单轮主起落架"],
-    structureTags: ["双发", "鲨鳍小翼"],
+    structureTags: ["双发", "融合式小翼"],
     sources: [{ name: "Pokémon Jet 资料汇总", url: "https://knaviation.net/pokemon-jets/", purpose: "B-18101、Airbus A321neo 与 Pikachu Jet CI 核验" }],
   },
   {
@@ -152,12 +155,12 @@ export const aircraftData: Aircraft[] = [
     largeAreaColors: ["白色", "蓝色"],
     engineCount: 4,
     hasWinglet: true,
-    wingletType: "翼梢小翼",
+    wingletType: "端板式小翼",
     hasUpperDeck: true,
     tailType: "conventional",
     enginesUnderWing: true,
     landingGearTags: ["前三点式", "四主起落架"],
-    structureTags: ["四发", "上层客舱", "翼梢小翼"],
+    structureTags: ["四发", "上层客舱", "端板式小翼"],
     sources: [{ name: "FlightGlobal 报道", url: "https://www.flightglobal.com/news/articles/pictures-boac-747-retrojet-marks-british-airways-ce-455845/", purpose: "G-BYGC、Boeing 747-400 与 BOAC 复古彩绘核验" }],
   },
   {
@@ -172,7 +175,7 @@ export const aircraftData: Aircraft[] = [
     registration: "N36272",
     manufacturer: "Boeing",
     bodyType: "narrowbody",
-    largeAreaColors: ["黑色", "蓝色", "红色"],
+    largeAreaColors: ["黑色", "蓝色"],
     engineCount: 2,
     hasWinglet: true,
     wingletType: "分裂式翼梢小翼",
@@ -242,7 +245,7 @@ export const aircraftData: Aircraft[] = [
     registration: "OO-SNB",
     manufacturer: "Airbus",
     bodyType: "narrowbody",
-    largeAreaColors: ["黑色", "白色"],
+    largeAreaColors: ["蓝色", "橙色"],
     engineCount: 2,
     hasWinglet: false,
     hasUpperDeck: false,
@@ -268,12 +271,12 @@ export const aircraftData: Aircraft[] = [
     largeAreaColors: ["蓝色", "绿色", "紫色"],
     engineCount: 2,
     hasWinglet: true,
-    wingletType: "翼梢小翼",
+    wingletType: "融合式小翼",
     hasUpperDeck: false,
     tailType: "conventional",
     enginesUnderWing: true,
     landingGearTags: ["前三点式", "双轮主起落架"],
-    structureTags: ["双发", "翼梢小翼"],
+    structureTags: ["双发", "融合式小翼"],
     sources: [{ name: "Icelandair Hekla Aurora", url: "https://www.icelandair.com/about/our-special-liveries/hekla-aurora/", purpose: "彩绘、注册号与机型核验" }],
   },
   {
@@ -380,7 +383,7 @@ export const aircraftData: Aircraft[] = [
     registration: "B-20EC",
     manufacturer: "Boeing",
     bodyType: "widebody",
-    largeAreaColors: ["紫红色", "金色"],
+    largeAreaColors: ["红色", "金色"],
     engineCount: 2,
     hasWinglet: false,
     hasUpperDeck: false,
@@ -402,7 +405,7 @@ export const aircraftData: Aircraft[] = [
     registration: "B-226M",
     manufacturer: "Boeing",
     bodyType: "widebody",
-    largeAreaColors: ["白色", "紫红色", "金色"],
+    largeAreaColors: ["白色", "红色", "金色"],
     engineCount: 2,
     hasWinglet: false,
     hasUpperDeck: false,
@@ -471,16 +474,21 @@ export const aircraftData: Aircraft[] = [
     largeAreaColors: ["白色", "蓝色", "红色"],
     engineCount: 4,
     hasWinglet: true,
-    wingletType: "翼梢小翼",
+    wingletType: "端板式小翼",
     hasUpperDeck: true,
     tailType: "conventional",
     enginesUnderWing: true,
     landingGearTags: ["前三点式", "四主起落架"],
-    structureTags: ["四发", "上层甲板", "翼梢小翼", "货机"],
+    structureTags: ["四发", "上层甲板", "端板式小翼", "货机"],
     sources: [{ name: "AviationWA 飞机记录", url: "https://www.aviationwa.org.au/20230107_4k-sw008_ypph_david_eyre-4/", purpose: "4K-SW008、Boeing 747-400F 与 10 Years 标识核验" }],
   },
   ...expandedAircraftData,
 ];
+
+export const aircraftData: Aircraft[] = aircraftSeeds
+  .map(applyAircraftDimensions)
+  .map(applyWingletClassification)
+  .map(applyEngineModelClassification);
 
 export function getRandomAircraft(previousId?: string): Aircraft {
   const candidates = previousId && aircraftData.length > 1

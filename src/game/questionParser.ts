@@ -1,6 +1,15 @@
 import type { AirlineRegionQuery, TailType } from "../types/aircraft";
 import type { AirlineLocation } from "../data/airlineLocations";
 import type { GameMode, ParsedQuestion } from "../types/game";
+import { parseEngineModelQuery } from "../data/engineModels";
+import {
+  BLENDED_WINGLET,
+  ENDPLATE_WINGLET,
+  FORKED_SCIMITAR_WINGLET,
+  RAKED_WINGTIP,
+  SPLIT_SCIMITAR_WINGLET,
+  WINGTIP_FENCE,
+} from "../data/wingletTypes";
 
 export interface ParseResult {
   parsed?: ParsedQuestion;
@@ -60,11 +69,16 @@ const locationAliases: Array<{ value: AirlineLocation; aliases: string[] }> = [
 ];
 
 const colorAliases: Record<string, string[]> = {
+  浅蓝色: ["浅蓝色", "浅蓝", "淡蓝色", "淡蓝"],
+  深蓝色: ["深蓝色", "深蓝", "藏蓝色", "藏蓝"],
   白色: ["白色", "白的", "白吗", "大白"],
   黑色: ["黑色", "黑的", "黑吗", "大黑"],
   蓝色: ["蓝色", "蓝的", "蓝吗", "大蓝"],
   红色: ["红色", "红的", "红吗", "大红"],
-  黄色: ["黄色", "黄的", "黄吗", "大黄", "金色"],
+  黄色: ["黄色", "黄的", "黄吗", "大黄"],
+  金色: ["金色", "金色的", "金的吗"],
+  灰色: ["灰色", "灰的", "灰吗"],
+  肉色: ["肉色", "肤色", "肉色的", "肤色的"],
   橙色: ["橙色", "橘色", "橙的吗", "橘的吗"],
   绿色: ["绿色", "绿的", "绿吗"],
   紫色: ["紫色", "紫的", "紫吗"],
@@ -114,6 +128,15 @@ const tailTypeAliases: Array<{ type: TailType; pattern: RegExp }> = [
   },
 ];
 
+const wingletTypeAliases: Array<{ value: string; pattern: RegExp }> = [
+  { value: FORKED_SCIMITAR_WINGLET, pattern: /叉弯刀式?小翼/ },
+  { value: SPLIT_SCIMITAR_WINGLET, pattern: /分裂式?(?:翼梢)?小翼/ },
+  { value: BLENDED_WINGLET, pattern: /融合式?小翼/ },
+  { value: ENDPLATE_WINGLET, pattern: /端板式?小翼/ },
+  { value: RAKED_WINGTIP, pattern: /斜削式?小翼/ },
+  { value: WINGTIP_FENCE, pattern: /翼尖帆/ },
+];
+
 // 具体机型只能在最终猜测中使用，不能伪装成制造商问题进入提问记录。
 // 覆盖常见的波音、空客型号及游戏最终猜测支持的常用简称。
 const aircraftModelPattern = /(?:(?:波音|boeing|b)?(?:707|717|727|737|747|757|767|777|787)(?:-?\d{1,3})?(?:er|lr|f|x)?|(?:空客|空中客车|airbus)?a(?:220|300|310|318|319|320|321|330|340|350|380)(?:-?\d{1,3})?(?:neo|ceo|xl|xwb)?|77w|77l|772|773|788|789|c919|c909|arj21|md-?11|dc-?10|l-?1011)/i;
@@ -121,9 +144,10 @@ const manufacturerFollowedByNumberPattern = /(?:(?:波音|boeing)(?:b)?-?\d+|(?:
 
 function normalize(input: string): string {
   return input
+    .normalize("NFKC")
     .trim()
     .toLowerCase()
-    .replace(/[？?！!，,。.　\s]/g, "");
+    .replace(/[？?！!，,。　\s]/g, "");
 }
 
 function stripLeadingQuestionHelpers(text: string): string {
@@ -161,6 +185,19 @@ export function parseQuestion(input: string, mode: GameMode = "hard"): ParseResu
   const negated = isNegated(normalizedText);
   const text = stripLeadingQuestionHelpers(normalizedText);
 
+  const lengthValueMatch = text.match(/(\d+(?:\.\d+)?)(?:米|m)/);
+  const hasLengthContext = /机身|长度|长|超过|大于|多于|小于|少于|短于|不到|以上|以下/.test(text);
+  if (lengthValueMatch && hasLengthContext) {
+    const numericValue = Number(lengthValueMatch[1]);
+    if (/超过|大于|多于|长于|以上/.test(text)) {
+      return { parsed: { kind: "fuselageLengthAbove", value: numericValue, negated } };
+    }
+    if (/小于|少于|短于|不到|低于|以下/.test(text)) {
+      return { parsed: { kind: "fuselageLengthBelow", value: numericValue, negated } };
+    }
+    return { parsed: { kind: "fuselageLengthExact", value: lengthValueMatch[1], negated } };
+  }
+
   if (manufacturerFollowedByNumberPattern.test(text) || aircraftModelPattern.test(text)) {
     return {
       error: "具体机型属于禁止提问内容，请只询问制造商，例如“是波音吗？”。",
@@ -176,11 +213,14 @@ export function parseQuestion(input: string, mode: GameMode = "hard"): ParseResu
     text === alias || text === `${alias}吗` || text === `${alias}地区` || text === `${alias}地区吗`
   ));
   if (location && (airlineDescriptorPattern.test(text) || /来自|属于|的吗|地区/.test(text) || isBareLocationQuestion)) {
-    if (mode === "easy") {
-      return { parsed: { kind: "country", value: location.value, negated } };
+    if (["台湾地区", "香港地区", "澳门地区"].includes(location.value)) {
+      return { parsed: { kind: "unsupportedCountry", value: location.value, negated } };
     }
     if (location.value === "中国大陆") {
       return { parsed: { kind: "china", value: true, negated } };
+    }
+    if (mode === "easy") {
+      return { parsed: { kind: "country", value: location.value, negated } };
     }
     return { parsed: { kind: "unsupportedCountry", value: location.value, negated } };
   }
@@ -217,6 +257,14 @@ export function parseQuestion(input: string, mode: GameMode = "hard"): ParseResu
   const engineCount = parseEngineCount(text);
   if (engineCount) {
     return { parsed: { kind: "engineCount", value: engineCount, negated } };
+  }
+  const engineModel = parseEngineModelQuery(text);
+  if (engineModel) {
+    return { parsed: { kind: "engineModel", value: engineModel, negated } };
+  }
+  const wingletType = wingletTypeAliases.find(({ pattern }) => pattern.test(text))?.value;
+  if (wingletType) {
+    return { parsed: { kind: "structureTag", value: wingletType, negated } };
   }
   if (/小翼|翼梢|翼尖|winglet/.test(text)) {
     return { parsed: { kind: "winglet", value: true, negated } };

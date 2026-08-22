@@ -222,13 +222,13 @@ export function GameScreen({ mode, target, onRestart, onReselectMode }: GameScre
           <>
             <span>宽窄体与制造商可以分别提问</span>
             <span>地区 / 国家问题最多 {modeRules[mode].maxRegionQuestions} 次，颜色问题最多 {modeRules[mode].maxColorQuestions} 次</span>
-            <span>国家和地区名称均可直接询问</span>
+            <span>普通国家和大区可询问；台湾、香港、澳门不可单独提问</span>
           </>
         ) : (
           <>
             <span>宽窄体与制造商只能选择一个方向</span>
             <span>地区、颜色问题各最多 2 次</span>
-            <span>普通国家不可直接询问，中国大陆除外</span>
+            <span>普通国家不可直接询问；台湾、香港、澳门不可单独提问</span>
           </>
         )}
       </aside>
@@ -243,7 +243,7 @@ export function GameScreen({ mode, target, onRestart, onReselectMode }: GameScre
       {isGuessOpen && (
         <FinalGuessModal
           title="我要猜飞机"
-          description={`输入航空公司、具体机型和彩绘名称。猜错只消耗机会，剩余 ${MAX_INTERMEDIATE_GUESSES - guessCount} 次。`}
+          description={`输入航空公司和飞机注册号。猜错只消耗机会，剩余 ${MAX_INTERMEDIATE_GUESSES - guessCount} 次。`}
           confirmLabel="确认猜测"
           target={target}
           onResolved={finishIntermediateGuess}

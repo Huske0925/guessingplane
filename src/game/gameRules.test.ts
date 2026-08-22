@@ -5,7 +5,7 @@ import { getQuestionSignature, parseQuestion } from "./questionParser";
 import { applyQuestionToRules, validateQuestion } from "./ruleValidator";
 import { currentMaxScore, scoreForGuess } from "./score";
 import { getRecommendations } from "./recommendations";
-import { LIVERY_SIMILARITY_THRESHOLD, resolveAircraftGuess, textSimilarity } from "./guessMatcher";
+import { LIVERY_SIMILARITY_THRESHOLD, resolveAircraftGuess, resolveAircraftGuessByRegistration, textSimilarity } from "./guessMatcher";
 import { canMakeFinalGamble, canMakeIntermediateGuess } from "./guessRules";
 import { getLandingGearCategory } from "./landingGear";
 
@@ -105,6 +105,16 @@ describe("问题解析", () => {
     (text) => expect(parseQuestion(text).parsed).toMatchObject({ kind: "color", value: "蓝色" }),
   );
 
+  it.each([
+    ["有浅蓝色吗？", "浅蓝色"],
+    ["是深蓝色吗？", "深蓝色"],
+    ["有金色吗？", "金色"],
+    ["有灰色吗？", "灰色"],
+    ["是肤色的吗？", "肉色"],
+  ] as const)("识别题库中完整的颜色名称：%s", (text, color) => {
+    expect(parseQuestion(text).parsed).toMatchObject({ kind: "color", value: color });
+  });
+
   it("不会把‘是不是’和‘有没有’误判为否定问法", () => {
     expect(parseQuestion("是不是波音飞机？").parsed).toMatchObject({ negated: false });
     expect(parseQuestion("有没有蓝色？").parsed).toMatchObject({ negated: false });
@@ -193,6 +203,51 @@ describe("问题解析", () => {
     expect(parseQuestion("有引擎吗？").parsed).toBeUndefined();
   });
 
+  it.each([
+    ["TrEnT？", "Trent"],
+    ["PW 引擎吗？", "PW"],
+    ["ge？", "GE"],
+    ["CFM 发动机吗？", "CFM"],
+    ["rb211？", "RB211"],
+    ["GE-NX？", "GEnx"],
+    ["cfm-56？", "CFM56"],
+    ["Trent1000？", "Trent 1000"],
+    ["遄达1000吗？", "Trent 1000"],
+    ["Trent700？", "Trent 700"],
+    ["遄达700发动机吗？", "Trent 700"],
+    ["Trent800？", "Trent 800"],
+    ["Trent892B？", "Trent 800"],
+    ["PW1133G？", "PW1100G"],
+    ["LEAP？", "LEAP"],
+    ["罗罗发动机吗？", "Rolls-Royce"],
+  ] as const)("大小写不敏感地识别发动机英文与简称：%s", (text, engineModel) => {
+    expect(parseQuestion(text).parsed).toMatchObject({ kind: "engineModel", value: engineModel });
+  });
+
+  it("数据库中每架飞机的发动机名称都能用任意英文大小写提问", () => {
+    for (const aircraft of aircraftData) {
+      for (const text of [aircraft.engineModel!.toLowerCase(), aircraft.engineModel!.toUpperCase()]) {
+        const question = parseQuestion(text).parsed!;
+        expect(question).toMatchObject({ kind: "engineModel" });
+        expect(answerQuestion(aircraft, question)).toBe(true);
+      }
+    }
+  });
+
+  it("发动机品牌简称会匹配该品牌下的数据库型号", () => {
+    const ge90Aircraft = aircraftData.find((aircraft) => aircraft.engineModel === "GE90")!;
+    const genxAircraft = aircraftData.find((aircraft) => aircraft.engineModel === "GEnx")!;
+    const trentAircraft = aircraftData.find((aircraft) => aircraft.engineModel === "Trent 900")!;
+    const cfmAircraft = aircraftData.find((aircraft) => aircraft.engineModel === "CFM56")!;
+    const pwAircraft = aircraftData.find((aircraft) => aircraft.engineModel === "PW4000")!;
+
+    expect(answerQuestion(ge90Aircraft, parseQuestion("GE？").parsed!)).toBe(true);
+    expect(answerQuestion(genxAircraft, parseQuestion("ge引擎吗？").parsed!)).toBe(true);
+    expect(answerQuestion(trentAircraft, parseQuestion("TRENT？").parsed!)).toBe(true);
+    expect(answerQuestion(cfmAircraft, parseQuestion("cfm？").parsed!)).toBe(true);
+    expect(answerQuestion(pwAircraft, parseQuestion("Pw？").parsed!)).toBe(true);
+  });
+
   it.each(["有小翼吗？", "是否有翼梢？", "有翼尖", "翼尖？", "winglet？"])(
     "把小翼、翼梢和翼尖表达识别为同一个问题：%s",
     (text) => expect(parseQuestion(text).parsed).toMatchObject({ kind: "winglet", value: true }),
@@ -202,6 +257,61 @@ describe("问题解析", () => {
     const wingtip = parseQuestion("翼尖？").parsed!;
     const winglet = parseQuestion("有小翼吗？").parsed!;
     expect(getQuestionSignature(wingtip)).toBe(getQuestionSignature(winglet));
+  });
+
+  it("所有已分类的小翼类型都会对通用小翼问题回答有", () => {
+    const genericWingletQuestion = parseQuestion("有没有小翼？").parsed!;
+    const classifiedAircraft = aircraftData.filter((aircraft) => aircraft.wingletType);
+
+    expect(classifiedAircraft.length).toBeGreaterThan(0);
+    expect(classifiedAircraft.every((aircraft) => aircraft.hasWinglet)).toBe(true);
+    expect(classifiedAircraft.every((aircraft) => answerQuestion(aircraft, genericWingletQuestion))).toBe(true);
+  });
+
+  it.each([
+    ["机身长度为62.8米吗", "fuselageLengthExact", "62.8"],
+    ["长63米？", "fuselageLengthExact", "63"],
+    ["长62.81m", "fuselageLengthExact", "62.81"],
+    ["机身长62.8m吗", "fuselageLengthExact", "62.8"],
+    ["机身长度超过60米吗", "fuselageLengthAbove", 60],
+    ["长于60m吗", "fuselageLengthAbove", 60],
+    ["机身长度多于60m吗", "fuselageLengthAbove", 60],
+    ["机身小于60m吗", "fuselageLengthBelow", 60],
+    ["机身长度少于60米吗", "fuselageLengthBelow", 60],
+    ["长短于60m吗", "fuselageLengthBelow", 60],
+    ["机身不到60米吗", "fuselageLengthBelow", 60],
+    ["机身60m吗", "fuselageLengthExact", "60"],
+  ] as const)("识别机身长度问法：%s", (text, kind, value) => {
+    expect(parseQuestion(text).parsed).toMatchObject({ kind, value });
+  });
+
+  it("使用官方机身长度区分 B-1356 与 B-2727", () => {
+    const b1356 = aircraftData.find((aircraft) => aircraft.registration === "B-1356")!;
+    const b2727 = aircraftData.find((aircraft) => aircraft.registration === "B-2727")!;
+    const above60 = parseQuestion("机身长度超过60米吗").parsed!;
+    const below60 = parseQuestion("机身小于60m吗").parsed!;
+    const rounded63 = parseQuestion("长63米吗").parsed!;
+    const exact628 = parseQuestion("长62.8m吗").parsed!;
+
+    expect(answerQuestion(b1356, above60)).toBe(true);
+    expect(answerQuestion(b2727, above60)).toBe(false);
+    expect(answerQuestion(b1356, below60)).toBe(false);
+    expect(answerQuestion(b2727, below60)).toBe(true);
+    expect(answerQuestion(b1356, rounded63)).toBe(true);
+    expect(answerQuestion(b1356, exact628)).toBe(true);
+  });
+
+  it("具体小翼类型不会被误判成通用的‘有没有小翼’", () => {
+    const ja784a = aircraftData.find((aircraft) => aircraft.registration === "JA784A")!;
+    const blended = parseQuestion("是融合式小翼吗？").parsed!;
+    const raked = parseQuestion("是斜削式小翼吗？").parsed!;
+    const generic = parseQuestion("有没有小翼？").parsed!;
+
+    expect(blended).toMatchObject({ kind: "structureTag", value: "融合式小翼" });
+    expect(raked).toMatchObject({ kind: "structureTag", value: "斜削式小翼" });
+    expect(answerQuestion(ja784a, blended)).toBe(false);
+    expect(answerQuestion(ja784a, raked)).toBe(true);
+    expect(answerQuestion(ja784a, generic)).toBe(true);
   });
 
   it.each([
@@ -266,25 +376,30 @@ describe("规则校验", () => {
     expect(validateQuestion(japan, { ...emptyRules }, 0).valid).toBe(false);
   });
 
-  it("简单模式准确区分中国大陆与台湾地区航空公司", () => {
+  it("中国问题包含大陆、台湾和香港航司，但禁止单独询问台湾、香港或澳门", () => {
     const eva = aircraftData.find((item) => item.registration === "B-16722")!;
+    const cathay = aircraftData.find((item) => item.registration === "B-KQN")!;
     const mainland = aircraftData.find((item) => item.airline === "中国东方航空")!;
     const taiwan = parseQuestion("它是台湾地区航空公司吗", "easy").parsed!;
-    const china = parseQuestion("是中国大陆航空公司吗", "easy").parsed!;
+    const hongKong = parseQuestion("香港", "easy").parsed!;
+    const macau = parseQuestion("澳门航司吗", "easy").parsed!;
+    const china = parseQuestion("是中国航空公司吗", "easy").parsed!;
 
-    expect(taiwan).toMatchObject({ kind: "country", value: "台湾地区" });
-    expect(china).toMatchObject({ kind: "country", value: "中国大陆" });
-    expect(answerQuestion(eva, taiwan)).toBe(true);
-    expect(answerQuestion(mainland, taiwan)).toBe(false);
-    expect(answerQuestion(eva, china)).toBe(false);
+    expect(taiwan).toMatchObject({ kind: "unsupportedCountry", value: "台湾地区" });
+    expect(hongKong).toMatchObject({ kind: "unsupportedCountry", value: "香港地区" });
+    expect(macau).toMatchObject({ kind: "unsupportedCountry", value: "澳门地区" });
+    for (const question of [taiwan, hongKong, macau]) {
+      expect(validateQuestion(question, { ...emptyRules }, 0, "easy")).toMatchObject({ valid: false });
+    }
+    expect(china).toMatchObject({ kind: "china", value: true });
+    expect(answerQuestion(eva, china)).toBe(true);
+    expect(answerQuestion(cathay, china)).toBe(true);
     expect(answerQuestion(mainland, china)).toBe(true);
   });
 
   it.each([
     ["日本航司", "日本"],
     ["是否是澳大利亚航空公司", "澳大利亚"],
-    ["它是香港地区公司吗", "香港地区"],
-    ["台湾航空公司吗", "台湾地区"],
     ["是法国航司吗", "法国"],
     ["来自印度尼西亚吗", "印度尼西亚"],
   ])("简单模式识别国家或所在地：%s", (text, value) => {
@@ -319,13 +434,13 @@ describe("规则校验", () => {
     });
   });
 
-  it("简单模式的国家问题与地区问题共用两次上限", () => {
+  it("简单模式的国家问题与地区问题共用三次上限", () => {
     const japan = parseQuestion("日本航空公司吗", "easy").parsed!;
-    const available = { direction: null, regionQuestions: 1, colorQuestions: 0 } as const;
-    const exhausted = { direction: null, regionQuestions: 2, colorQuestions: 0 } as const;
+    const available = { direction: null, regionQuestions: 2, colorQuestions: 0 } as const;
+    const exhausted = { direction: null, regionQuestions: 3, colorQuestions: 0 } as const;
 
-    expect(validateQuestion(japan, available, 1, "easy").valid).toBe(true);
-    expect(validateQuestion(japan, exhausted, 2, "easy").valid).toBe(false);
+    expect(validateQuestion(japan, available, 2, "easy").valid).toBe(true);
+    expect(validateQuestion(japan, exhausted, 3, "easy").valid).toBe(false);
   });
 
   it("限定彩绘问题不消耗次数", () => {
@@ -437,6 +552,35 @@ describe("动态推荐问题", () => {
 });
 
 describe("手动答案核验", () => {
+  it.each([
+    ["厦航", "B-1356", "xiamenair-b1356-united-dream"],
+    ["MF", "b1356", "xiamenair-b1356-united-dream"],
+    ["CZ", "B2727", "china-southern-b2727-dream-wings"],
+    ["CI", "b18101", "china-airlines-b18101-pikachu"],
+    ["CX", "BKQN", "cathay-bkqn-oneworld"],
+    ["NH", "ja873a", "ana-ja873a-r2d2"],
+    ["ZH", "b32f0", "shenzhen-b32f0-kunpeng"],
+    ["CSZ", "B-1017", "shenzhen-b1017-shenzhen"],
+    ["HU", "b1499", "hainan-b1499-ihg-explorer"],
+    ["CA", "B2006", "air-china-b2006-love-china"],
+    ["CCA", "B-308M", "air-china-b308m-star-alliance"],
+    ["CI", "B18918", "china-airlines-b18918-carbon-fibre"],
+    ["MH", "9MMRD", "malaysia-9mmrd-freedom-of-space"],
+    ["SQ", "9VSWI", "singapore-9vswi-white-star-alliance"],
+    ["QR", "A7BEG", "qatar-a7beg-formula-one"],
+    ["LH", "DABPU", "lufthansa-dabpu-100-years"],
+    ["DL", "N521DN", "delta-n521dn-team-usa"],
+  ])("最终核验只使用航司或代码与注册号：%s / %s", (airline, registration, expectedId) => {
+    expect(resolveAircraftGuessByRegistration(airline, registration)).toMatchObject({
+      status: "matched",
+      aircraft: { id: expectedId },
+    });
+  });
+
+  it("最终核验的航司与注册号必须属于同一架飞机", () => {
+    expect(resolveAircraftGuessByRegistration("CZ", "B-1356").status).toBe("not-found");
+  });
+
   it("每一架飞机都必须提供彩绘名称后才能匹配", () => {
     for (const aircraft of aircraftData) {
       const resolution = resolveAircraftGuess(aircraft.airline, aircraft.aircraftModel);
@@ -456,6 +600,7 @@ describe("手动答案核验", () => {
     ["KLM", "B777-300ER", "Orange Pride", "klm-phbva-orange-pride"],
     ["KLM", "77W", "橙色骄傲", "klm-phbva-orange-pride"],
     ["华航", "321neo", "皮卡丘", "china-airlines-b18101-pikachu"],
+    ["厦航", "787", "B-1356", "xiamenair-b1356-united-dream"],
   ])("接受航空公司和机型的常见简称：%s / %s", (airline, model, livery, expectedId) => {
     expect(resolveAircraftGuess(airline, model, livery)).toMatchObject({
       status: "matched",
